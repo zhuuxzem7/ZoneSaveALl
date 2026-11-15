@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+capacitor.config.json
+android/
+release-apk/

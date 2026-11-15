@@ -6,7 +6,9 @@ export type SocialPlatform =
   | 'facebook'
   | 'youtube'
   | 'twitter'
-  | 'pinterest';
+  | 'pinterest'
+  | 'threads'
+  | 'capcut';
 
 export interface ExtractedMediaResult {
   platform: SocialPlatform;
@@ -96,6 +98,22 @@ export function detectPlatform(url: string): SocialPlatform | null {
     ) {
       return 'pinterest';
     }
+    if (
+      host === 'threads.net' ||
+      host.endsWith('.threads.net') ||
+      host === 'threads.com' ||
+      host.endsWith('.threads.com')
+    ) {
+      return 'threads';
+    }
+    if (
+      host === 'capcut.com' ||
+      host.endsWith('.capcut.com') ||
+      host === 'capcut.net' ||
+      host.endsWith('.capcut.net')
+    ) {
+      return 'capcut';
+    }
     return null;
   } catch {
     return null;
@@ -127,6 +145,15 @@ export function isAllowedMediaDownloadUrl(input: string): boolean {
       host.endsWith('twimg.com') ||
       host.endsWith('pinimg.com') ||
       host.endsWith('googlevideo.com') ||
+      host.endsWith('ytimg.com') ||
+      host.endsWith('ggpht.com') ||
+      host.endsWith('tikcdn.io') ||
+      host.endsWith('capcut.com') ||
+      host.endsWith('capcutcdn.com') ||
+      host.endsWith('byteintl.com') ||
+      host.endsWith('threads.net') ||
+      host.endsWith('threads.com') ||
+      host.includes('tiktokcdn') ||
       host.endsWith('tioo.eu.org')
     );
   } catch {
@@ -715,6 +742,256 @@ async function extractPinterest(url: string): Promise<ExtractedMediaResult> {
   throw new Error('Media Pinterest tidak ditemukan. Pastikan tautan pin valid.');
 }
 
+async function extractThreads(url: string): Promise<ExtractedMediaResult> {
+  const canonicalUrl = url.replace('threads.com', 'threads.net');
+
+  for (const endpoint of ['threads', 'igdl']) {
+    try {
+      const apiRes = await fetch(
+        `https://backend1.tioo.eu.org/${endpoint}?url=${encodeURIComponent(canonicalUrl)}`,
+        {
+          headers: BTCH_HEADERS,
+          signal: AbortSignal.timeout(20000),
+        }
+      );
+      if (apiRes.ok) {
+        const json = (await apiRes.json()) as {
+          status?: number | boolean;
+          result?: Array<{ url?: string; thumbnail?: string; wm?: string }> | {
+            video?: string[];
+            image?: string[];
+            video_urls?: Array<{ download_url?: string }>;
+            image_urls?: string[];
+          };
+          video?: string[];
+          image?: string[];
+        };
+
+        const videos: string[] = [];
+        const images: string[] = [];
+        let thumb = '';
+
+        if (Array.isArray(json.result)) {
+          for (const item of json.result) {
+            if (!item?.url) continue;
+            if (!thumb && item.thumbnail) thumb = item.thumbnail;
+            if (/\.mp4|video/i.test(item.url) || !/\.(jpe?g|png|webp)(\?|$)/i.test(item.url)) {
+              videos.push(item.url);
+            } else {
+              images.push(item.url);
+            }
+          }
+        } else if (json.result && typeof json.result === 'object') {
+          if (Array.isArray(json.result.video)) videos.push(...json.result.video);
+          if (Array.isArray(json.result.image)) images.push(...json.result.image);
+          if (Array.isArray(json.result.video_urls)) {
+            for (const v of json.result.video_urls) {
+              if (v?.download_url) videos.push(v.download_url);
+            }
+          }
+          if (Array.isArray(json.result.image_urls)) images.push(...json.result.image_urls);
+        }
+
+        if (Array.isArray(json.video)) videos.push(...json.video);
+        if (Array.isArray(json.image)) images.push(...json.image);
+
+        if (videos.length > 0 || images.length > 0) {
+          const mediaItems = [
+            ...videos.map((v) => ({ type: 'video' as const, url: v, thumbnail: thumb || images[0] })),
+            ...images.map((img) => ({ type: 'image' as const, url: img, thumbnail: img })),
+          ];
+          return {
+            platform: 'threads',
+            id: String(Date.now()),
+            title: 'Postingan Threads',
+            cover: thumb || images[0] || '',
+            play: videos[0] || '',
+            hdplay: videos[0] || '',
+            music: '',
+            sdLabel: 'Standar',
+            hdLabel: videos[0] ? 'HD' : undefined,
+            image: videos.length === 0 ? images[0] : undefined,
+            mediaItems: mediaItems.length > 1 ? mediaItems : undefined,
+            duration: 0,
+            size: 0,
+            hdSize: 0,
+            stats: {},
+            author: {
+              nickname: 'Kreator Threads',
+              uniqueId: 'threads',
+              avatar: '',
+            },
+          };
+        }
+      }
+    } catch {
+      // try next fallback
+    }
+  }
+
+  // Direct HTML fallback
+  try {
+    const htmlRes = await fetch(canonicalUrl, {
+      headers: {
+        'User-Agent': BROWSER_UA,
+        Accept: 'text/html,application/xhtml+xml',
+      },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (htmlRes.ok) {
+      const html = await htmlRes.text();
+      const videoMatches = html.match(/https:\/\/[^"\\]+\.mp4[^"\\]*/gi) || [];
+      const cleanVideos = videoMatches.map((u) => unescapeJsonString(u));
+      const ogImgMatch = html.match(/property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+      const cover = ogImgMatch ? decodeHtmlEntities(ogImgMatch[1]) : '';
+
+      if (cleanVideos.length > 0) {
+        return {
+          platform: 'threads',
+          id: String(Date.now()),
+          title: 'Video Threads',
+          cover,
+          play: cleanVideos[0],
+          hdplay: cleanVideos[0],
+          music: '',
+          sdLabel: 'Standar',
+          hdLabel: 'HD',
+          duration: 0,
+          size: 0,
+          hdSize: 0,
+          stats: {},
+          author: {
+            nickname: 'Kreator Threads',
+            uniqueId: 'threads',
+            avatar: '',
+          },
+        };
+      }
+    }
+  } catch {
+    // ignore HTML fallback error
+  }
+
+  throw new Error(
+    'Media Threads tidak ditemukan. Pastikan postingan bersifat publik dan berisi video atau foto.'
+  );
+}
+
+async function extractCapCut(url: string): Promise<ExtractedMediaResult> {
+  let resolvedUrl = url;
+  try {
+    const headRes = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow',
+      headers: { 'User-Agent': BROWSER_UA },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (headRes.url) resolvedUrl = headRes.url;
+
+    const html = await headRes.text();
+    for (const endpoint of ['capcut', 'aio']) {
+      try {
+        const apiRes = await fetch(
+          `https://backend1.tioo.eu.org/${endpoint}?url=${encodeURIComponent(resolvedUrl)}`,
+          {
+            headers: BTCH_HEADERS,
+            signal: AbortSignal.timeout(15000),
+          }
+        );
+        if (apiRes.ok) {
+          const json = (await apiRes.json()) as {
+            status?: boolean | number;
+            title?: string;
+            video?: string;
+            url?: string;
+            cover?: string;
+            thumbnail?: string;
+            result?: {
+              title?: string;
+              video?: string;
+              url?: string;
+              cover?: string;
+              thumbnail?: string;
+              author?: string;
+            };
+          };
+
+          const videoUrl = json.result?.video || json.result?.url || json.video || json.url || '';
+          const coverUrl =
+            json.result?.cover || json.result?.thumbnail || json.cover || json.thumbnail || '';
+          const title = json.result?.title || json.title || 'Template CapCut';
+
+          if (videoUrl) {
+            return {
+              platform: 'capcut',
+              id: String(Date.now()),
+              title: decodeHtmlEntities(title),
+              cover: coverUrl,
+              play: videoUrl,
+              hdplay: videoUrl,
+              music: '',
+              sdLabel: 'Standar',
+              hdLabel: 'HD',
+              duration: 0,
+              size: 0,
+              hdSize: 0,
+              stats: {},
+              author: {
+                nickname: json.result?.author || 'Kreator CapCut',
+                uniqueId: 'capcut',
+                avatar: '',
+              },
+            };
+          }
+        }
+      } catch {
+        // continue to HTML extraction
+      }
+    }
+
+    const videoJsonMatch =
+      html.match(/"video_url"\s*:\s*"([^"]+\.mp4[^"]*)"/i) ||
+      html.match(/"play_url"\s*:\s*"([^"]+)"/i) ||
+      html.match(/property=["']og:video(?::url)?["'][^>]+content=["']([^"']+)["']/i);
+    const rawVideo = videoJsonMatch ? unescapeJsonString(videoJsonMatch[1]) : '';
+    const coverMatch =
+      html.match(/"cover_url"\s*:\s*"([^"]+)"/i) ||
+      html.match(/property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+    const titleMatch =
+      html.match(/"short_title"\s*:\s*"([^"]+)"/i) ||
+      html.match(/property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+
+    if (rawVideo && !rawVideo.includes('cc_landing/video_en')) {
+      return {
+        platform: 'capcut',
+        id: String(Date.now()),
+        title: titleMatch ? decodeHtmlEntities(unescapeJsonString(titleMatch[1])) : 'Template CapCut',
+        cover: coverMatch ? unescapeJsonString(coverMatch[1]) : '',
+        play: rawVideo,
+        hdplay: rawVideo,
+        music: '',
+        sdLabel: 'Standar',
+        hdLabel: 'HD',
+        duration: 0,
+        size: 0,
+        hdSize: 0,
+        stats: {},
+        author: {
+          nickname: 'Kreator CapCut',
+          uniqueId: 'capcut',
+          avatar: '',
+        },
+      };
+    }
+  } catch {
+    // ignore and throw friendly Indonesian error
+  }
+
+  throw new Error(
+    'Video CapCut tidak ditemukan. Pastikan tautan template/video CapCut valid dan bersifat publik.'
+  );
+}
+
 export async function extractMediaFromUrl(rawUrl: string): Promise<ExtractedMediaResult> {
   const normalizedUrl = normalizeUserLink(rawUrl);
   if (!normalizedUrl) {
@@ -724,7 +1001,7 @@ export async function extractMediaFromUrl(rawUrl: string): Promise<ExtractedMedi
   const platform = detectPlatform(normalizedUrl);
   if (!platform) {
     throw new Error(
-      'Platform belum didukung atau tautan tidak valid. Gunakan tautan TikTok, Instagram, Facebook, YouTube, X/Twitter, atau Pinterest.'
+      'Platform belum didukung atau tautan tidak valid. Gunakan tautan TikTok, Instagram, Facebook, YouTube, X/Twitter, Pinterest, Threads, atau CapCut.'
     );
   }
 
@@ -741,5 +1018,9 @@ export async function extractMediaFromUrl(rawUrl: string): Promise<ExtractedMedi
       return extractTwitter(normalizedUrl);
     case 'pinterest':
       return extractPinterest(normalizedUrl);
+    case 'threads':
+      return extractThreads(normalizedUrl);
+    case 'capcut':
+      return extractCapCut(normalizedUrl);
   }
 }

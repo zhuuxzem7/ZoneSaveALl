@@ -1,9 +1,15 @@
-export default function Footer() {
+import type { LegalModalTab } from './LegalAndReportModal';
+
+interface FooterProps {
+  onOpenLegal?: (tab: LegalModalTab) => void;
+}
+
+export default function Footer({ onOpenLegal }: FooterProps) {
   const year = new Date().getFullYear();
 
   return (
     <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 transition-colors duration-200">
-      <div className="mx-auto flex max-w-6xl flex-col sm:flex-row items-center justify-between gap-4 px-4 sm:px-6 py-8 text-sm text-slate-500 dark:text-slate-400">
+      <div className="mx-auto flex max-w-6xl flex-col lg:flex-row items-center justify-between gap-4 px-4 sm:px-6 pt-8 pb-24 md:pb-8 text-sm text-slate-500 dark:text-slate-400">
         <div className="flex flex-col sm:flex-row items-center gap-2.5 sm:gap-3.5 text-center sm:text-left">
           <div className="inline-flex items-center gap-2">
             <img
@@ -23,7 +29,7 @@ export default function Footer() {
           </span>
         </div>
 
-        <nav className="flex items-center gap-6 text-xs sm:text-sm">
+        <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs sm:text-sm">
           <a
             href="#beranda"
             className="hover:text-slate-900 dark:hover:text-slate-200 transition-colors whitespace-nowrap"
@@ -42,6 +48,31 @@ export default function Footer() {
           >
             FAQ
           </a>
+          {onOpenLegal && (
+            <>
+              <button
+                type="button"
+                onClick={() => onOpenLegal('privacy')}
+                className="hover:text-slate-900 dark:hover:text-slate-200 transition-colors whitespace-nowrap cursor-pointer"
+              >
+                Privasi
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenLegal('terms')}
+                className="hover:text-slate-900 dark:hover:text-slate-200 transition-colors whitespace-nowrap cursor-pointer"
+              >
+                Ketentuan
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenLegal('report')}
+                className="hover:text-amber-600 dark:hover:text-amber-400 transition-colors whitespace-nowrap cursor-pointer"
+              >
+                Lapor Bug
+              </button>
+            </>
+          )}
           <a
             href="https://t.me/ZhuuVerzon"
             target="_blank"

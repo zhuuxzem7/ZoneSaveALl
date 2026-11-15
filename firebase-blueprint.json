@@ -1,0 +1,215 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private user account profile storing display name, email, avatar data URL, short bio, and app preferences.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID matching document ID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name shown in profile and header.",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User email address.",
+          "maxLength": 120
+        },
+        "photoDataUrl": {
+          "type": "string",
+          "description": "Compressed square avatar data URL or HTTPS photo URL.",
+          "maxLength": 250000
+        },
+        "bio": {
+          "type": "string",
+          "description": "Optional short profile bio.",
+          "maxLength": 160
+        },
+        "preferredFilenameMode": {
+          "type": "string",
+          "enum": ["default", "title"],
+          "description": "Preferred downloaded filename format."
+        },
+        "autoClipboard": {
+          "type": "boolean",
+          "description": "Whether automatic clipboard URL detection is enabled."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last update timestamp."
+        }
+      },
+      "required": ["uid", "displayName", "email", "createdAt", "updatedAt"]
+    },
+    "SavedMediaItem": {
+      "title": "SavedMediaItem",
+      "description": "User-saved download history, favorite social media links, and collection folders synced across devices.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Composite media identifier.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "platform": {
+          "type": "string",
+          "enum": [
+            "tiktok",
+            "instagram",
+            "facebook",
+            "youtube",
+            "twitter",
+            "pinterest",
+            "threads",
+            "capcut"
+          ],
+          "description": "Source social media platform."
+        },
+        "url": {
+          "type": "string",
+          "description": "Cleaned source social media URL.",
+          "maxLength": 500
+        },
+        "title": {
+          "type": "string",
+          "description": "Media title or caption.",
+          "maxLength": 300
+        },
+        "authorName": {
+          "type": "string",
+          "description": "Creator display name.",
+          "maxLength": 100
+        },
+        "uniqueId": {
+          "type": "string",
+          "description": "Creator handle.",
+          "maxLength": 100
+        },
+        "cover": {
+          "type": "string",
+          "description": "Thumbnail URL.",
+          "maxLength": 1000
+        },
+        "isFavorite": {
+          "type": "boolean",
+          "description": "Whether item is pinned as favorite."
+        },
+        "collectionFolder": {
+          "type": "string",
+          "enum": ["Umum", "Ide Konten", "Sound Viral", "Referensi"],
+          "description": "User-selected bookmark collection folder."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last update timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "platform",
+        "url",
+        "title",
+        "authorName",
+        "uniqueId",
+        "cover",
+        "isFavorite",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "BugReport": {
+      "title": "BugReport",
+      "description": "Owner-submitted broken link or error report for troubleshooting.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Report document ID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "targetUrl": {
+          "type": "string",
+          "description": "Media URL that failed or had an issue.",
+          "maxLength": 500
+        },
+        "platform": {
+          "type": "string",
+          "description": "Detected or selected platform name.",
+          "maxLength": 32
+        },
+        "description": {
+          "type": "string",
+          "description": "User issue description.",
+          "minLength": 5,
+          "maxLength": 600
+        },
+        "status": {
+          "type": "string",
+          "enum": ["open", "resolved"],
+          "description": "Initial report status."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        }
+      },
+      "required": ["id", "userId", "targetUrl", "platform", "description", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Owner-only user profile documents containing PII and preferences."
+    },
+    "/users/{userId}/downloads/{downloadId}": {
+      "schema": {
+        "$ref": "#/entities/SavedMediaItem"
+      },
+      "description": "Owner-only cloud-synced download history, favorite items, and folders."
+    },
+    "/users/{userId}/reports/{reportId}": {
+      "schema": {
+        "$ref": "#/entities/BugReport"
+      },
+      "description": "Owner-only submitted broken-link and bug reports."
+    }
+  }
+}

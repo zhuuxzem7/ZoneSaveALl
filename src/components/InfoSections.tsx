@@ -12,7 +12,7 @@ const STEPS = [
     number: '01.',
     title: 'Salin Tautan Sosial Media',
     description:
-      'Buka aplikasi TikTok, Instagram, Facebook, YouTube, X (Twitter), atau Pinterest, lalu pilih Bagikan dan Salin Tautan.',
+      'Buka aplikasi TikTok, Instagram, Facebook, YouTube, X, Pinterest, Threads, atau CapCut, lalu pilih Bagikan dan Salin Tautan.',
   },
   {
     number: '02.',
@@ -24,7 +24,7 @@ const STEPS = [
     number: '03.',
     title: 'Simpan MP4, HD, atau MP3',
     description:
-      'Klik tombol hijau untuk menyimpan video MP4 tanpa watermark, kualitas HD asli (hingga 1080p), gambar asli, atau ekstrak audio MP3.',
+      'Klik tombol hijau untuk menyimpan video MP4 tanpa watermark, kualitas HD asli (hingga 1080p), carousel ZIP, atau audio MP3.',
   },
 ];
 
@@ -32,7 +32,7 @@ const FEATURES = [
   {
     title: 'Satu Halaman Semua Sosial Media',
     description:
-      'Mendukung TikTok tanpa watermark, Instagram Reels & Carousel, Facebook Watch, YouTube MP4/MP3, X/Twitter, dan Pinterest.',
+      'Mendukung TikTok, Instagram, Facebook, YouTube MP4/MP3, X/Twitter, Pinterest, Threads, dan CapCut dalam satu halaman ringkas.',
   },
   {
     title: 'Deteksi Logo & Link Otomatis',
@@ -40,14 +40,14 @@ const FEATURES = [
       'Cukup tempel link apa saja — kolom input langsung menampilkan logo platform yang sesuai tanpa perlu berpindah situs.',
   },
   {
-    title: 'Resolusi Asli 1080p/720p HD & MP3',
+    title: 'Resolusi Asli 1080p/720p HD & ZIP',
     description:
-      'Opsi HD selalu memilih aliran video resolusi dan bitrate tertinggi yang tersedia (1080p Full HD / 720p HD), serta audio MP3.',
+      'Opsi HD selalu memilih aliran video bitrate tertinggi (1080p/720p), plus unduh seluruh slide carousel ke file ZIP sekaligus.',
   },
   {
-    title: 'Berjalan di Semua Perangkat',
+    title: 'Berjalan di Semua Perangkat & PWA',
     description:
-      'Kompatibel penuh di browser Android, iPhone (Safari), Windows, dan macOS tanpa instalasi aplikasi tambahan.',
+      'Bisa dipasang ke Layar Utama Android & PC serta mendukung Share Sheet langsung dari aplikasi sosial media Anda.',
   },
 ];
 
@@ -55,7 +55,7 @@ const FAQS = [
   {
     question: 'Platform sosial media apa saja yang bisa diunduh di ZoneSaveALL?',
     answer:
-      'ZoneSaveALL mendukung pengunduhan video, foto, dan audio dari TikTok (tanpa watermark), Instagram (Reels, Post, Carousel), Facebook (Watch & Reels), YouTube (Video & Shorts MP4/MP3), X / Twitter, serta Pinterest.',
+      'ZoneSaveALL mendukung pengunduhan video, foto, dan audio dari TikTok (tanpa watermark), Instagram (Reels, Post, Carousel), Facebook (Watch & Reels), YouTube (Video & Shorts MP4/MP3), X / Twitter, Pinterest, Threads, serta CapCut.',
   },
   {
     question: 'Apakah saya harus memilih tab platform secara manual sebelum menempel link?',
@@ -86,7 +86,11 @@ export default function InfoSections({ onSelectPlatform }: InfoSectionsProps) {
   return (
     <div className="mx-auto max-w-6xl px-4 sm:px-6 py-7 sm:py-10 space-y-9 sm:space-y-11">
       {/* Section: Supported Platforms Directory */}
-      <section aria-label="Platform yang Didukung">
+      <section
+        id="platform-list"
+        aria-label="Platform yang Didukung"
+        className="scroll-mt-20"
+      >
         <div>
           <h2 className="font-display text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
             Downloader Semua Sosial Media
@@ -96,7 +100,7 @@ export default function InfoSections({ onSelectPlatform }: InfoSectionsProps) {
           </p>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3.5">
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3.5">
           {socialPlatforms.map((platform) => (
             <button
               key={platform.id}

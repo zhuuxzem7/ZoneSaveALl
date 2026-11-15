@@ -4,7 +4,9 @@ export type SocialPlatform =
   | 'facebook'
   | 'youtube'
   | 'twitter'
-  | 'pinterest';
+  | 'pinterest'
+  | 'threads'
+  | 'capcut';
 
 export type PlatformTab = 'all' | SocialPlatform;
 

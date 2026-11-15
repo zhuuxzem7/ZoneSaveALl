@@ -57,6 +57,7 @@ async function startServer() {
       typeof req.query.filename === 'string' ? req.query.filename.trim() : 'zonesaveall-media';
     const typeParam = typeof req.query.type === 'string' ? req.query.type : 'mp4';
     const mediaType = typeParam === 'mp3' ? 'mp3' : typeParam === 'jpg' ? 'jpg' : 'mp4';
+    const isInline = req.query.inline === '1';
 
     if (!mediaUrl || !isAllowedMediaDownloadUrl(mediaUrl)) {
       res.status(400).json({ error: 'Tautan unduhan tidak valid.' });
@@ -69,13 +70,16 @@ async function startServer() {
     const finalFilename = safeBase.endsWith(extension) ? safeBase : `${safeBase}${extension}`;
 
     try {
-      const upstream = await fetch(mediaUrl, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-          Referer: 'https://www.tikwm.com/',
-        },
-      });
+      const fetchHeaders: Record<string, string> = {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        Referer: 'https://www.tikwm.com/',
+      };
+      if (typeof req.headers.range === 'string') {
+        fetchHeaders.Range = req.headers.range;
+      }
+
+      const upstream = await fetch(mediaUrl, { headers: fetchHeaders });
 
       if (!upstream.ok || !upstream.body) {
         res.redirect(mediaUrl);
@@ -89,13 +93,27 @@ async function startServer() {
             ? upstream.headers.get('content-type') || 'image/jpeg'
             : upstream.headers.get('content-type') || 'video/mp4';
 
+      res.status(upstream.status);
       const contentLength = upstream.headers.get('content-length');
       if (contentLength) {
         res.setHeader('Content-Length', contentLength);
       }
+      const contentRange = upstream.headers.get('content-range');
+      if (contentRange) {
+        res.setHeader('Content-Range', contentRange);
+      }
+      const acceptRanges = upstream.headers.get('accept-ranges');
+      if (acceptRanges) {
+        res.setHeader('Accept-Ranges', acceptRanges);
+      }
 
       res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Disposition', `attachment; filename="${finalFilename}"`);
+      res.setHeader(
+        'Content-Disposition',
+        isInline
+          ? `inline; filename="${finalFilename}"`
+          : `attachment; filename="${finalFilename}"`
+      );
       res.setHeader('Cache-Control', 'no-store');
 
       const nodeStream = Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]);
