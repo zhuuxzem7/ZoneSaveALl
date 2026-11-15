@@ -1,0 +1,6 @@
+{
+  "name": "ZoneSaveALL - Downloader Video & Audio Semua Sosial Media",
+  "description": "Unduh video TikTok tanpa watermark, Instagram Reels, Facebook, YouTube, X, dan Pinterest kualitas HD asli serta audio MP3 secara gratis dan cepat.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
