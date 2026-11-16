@@ -1,5 +1,6 @@
 import express, { type Request, type Response } from 'express';
 import { createServer as createViteServer } from 'vite';
+import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -122,6 +123,7 @@ async function handleMediaLookup(req: Request, res: Response) {
 
 async function startServer() {
   const app = express();
+  const httpServer = http.createServer(app);
   app.use(express.json());
 
   app.get('/api/health', (_req, res) => {
@@ -252,8 +254,13 @@ async function startServer() {
   });
 
   if (process.env.NODE_ENV !== 'production') {
+    const disableHmr = process.env.DISABLE_HMR === 'true';
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        ws: { server: httpServer },
+        hmr: disableHmr ? false : { server: httpServer },
+      },
       appType: 'spa',
     });
 
@@ -294,7 +301,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`ZoneSaveALL server running at http://0.0.0.0:${PORT}`);
   });
 }
