@@ -7,10 +7,13 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  applyActionCode,
   confirmPasswordReset,
   createUserWithEmailAndPassword,
   EmailAuthProvider,
+  GoogleAuthProvider,
   linkWithCredential,
+  linkWithPopup,
   onAuthStateChanged,
   reauthenticateWithCredential,
   reauthenticateWithPopup,
@@ -39,11 +42,15 @@ import {
 import {
   auth,
   db,
+  GOOGLE_DRIVE_SCOPES,
   googleProvider,
   handleFirestoreError,
   OperationType,
 } from '../lib/firebase';
 import type { SocialPlatform } from '../types/media';
+
+// Cached strictly in memory (never localStorage/sessionStorage) per security policy.
+let cachedDriveAccessToken: string | null = null;
 
 export type CollectionFolder = 'Umum' | 'Ide Konten' | 'Sound Viral' | 'Referensi';
 
@@ -84,6 +91,10 @@ interface AuthContextValue {
   cloudHistory: CloudHistoryItem[];
   hasPasswordProvider: boolean;
   hasGoogleProvider: boolean;
+  hasDriveAccess: boolean;
+  getDriveAccessToken: () => string | null;
+  invalidateDriveAccessToken: () => void;
+  connectGoogleDrive: () => Promise<string>;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (displayName: string, email: string, password: string) => Promise<void>;
@@ -102,6 +113,8 @@ interface AuthContextValue {
   }) => Promise<void>;
   sendPasswordChangeCodeToEmail: () => Promise<void>;
   verifyAndConfirmPasswordCode: (codeOrUrl: string, newPassword: string) => Promise<void>;
+  confirmPasswordResetByActionCode: (oobCode: string, newPassword: string) => Promise<string>;
+  applyEmailVerificationByCode: (oobCode: string) => Promise<void>;
   syncDownloadToCloud: (item: Omit<CloudHistoryItem, 'savedAt'>) => Promise<void>;
   toggleCloudFavorite: (id: string, isFavorite: boolean) => Promise<void>;
   updateCloudFolder: (id: string, collectionFolder: CollectionFolder) => Promise<void>;
@@ -165,6 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfileData | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [cloudHistory, setCloudHistory] = useState<CloudHistoryItem[]>([]);
+  const [hasDriveAccess, setHasDriveAccess] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
@@ -172,6 +186,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthReady(true);
 
       if (!nextUser) {
+        cachedDriveAccessToken = null;
+        setHasDriveAccess(false);
         setProfile(null);
         setCloudHistory([]);
         return;
@@ -291,8 +307,87 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user?.providerData?.some((provider) => provider.providerId === 'google.com')
   );
 
+  const getDriveAccessToken = useCallback(() => cachedDriveAccessToken, []);
+
+  const invalidateDriveAccessToken = useCallback(() => {
+    cachedDriveAccessToken = null;
+    setHasDriveAccess(false);
+  }, []);
+
   const signInWithGoogle = useCallback(async () => {
-    await signInWithPopup(auth, googleProvider);
+    const result = await signInWithPopup(auth, googleProvider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (credential?.accessToken) {
+      cachedDriveAccessToken = credential.accessToken;
+      setHasDriveAccess(true);
+    }
+  }, []);
+
+  const connectGoogleDrive = useCallback(async (): Promise<string> => {
+    const driveProvider = new GoogleAuthProvider();
+    for (const scope of GOOGLE_DRIVE_SCOPES) {
+      driveProvider.addScope(scope);
+    }
+    const current = auth.currentUser;
+    if (current?.email) {
+      driveProvider.setCustomParameters({
+        prompt: 'consent select_account',
+        login_hint: current.email,
+      });
+    } else {
+      driveProvider.setCustomParameters({ prompt: 'consent select_account' });
+    }
+
+    let token: string | undefined;
+    if (current) {
+      const alreadyGoogle = current.providerData.some((p) => p.providerId === 'google.com');
+      if (alreadyGoogle) {
+        try {
+          const result = await reauthenticateWithPopup(current, driveProvider);
+          token = GoogleAuthProvider.credentialFromResult(result)?.accessToken;
+        } catch (err) {
+          const code =
+            typeof err === 'object' && err !== null && 'code' in err
+              ? String((err as { code?: string }).code)
+              : '';
+          if (code === 'auth/user-mismatch') {
+            const fallbackResult = await signInWithPopup(auth, driveProvider);
+            token = GoogleAuthProvider.credentialFromResult(fallbackResult)?.accessToken;
+          } else {
+            throw err;
+          }
+        }
+      } else {
+        try {
+          const linked = await linkWithPopup(current, driveProvider);
+          token = GoogleAuthProvider.credentialFromResult(linked)?.accessToken;
+          await current.reload();
+          setUser(auth.currentUser);
+        } catch (err) {
+          const code =
+            typeof err === 'object' && err !== null && 'code' in err
+              ? String((err as { code?: string }).code)
+              : '';
+          if (code === 'auth/credential-already-in-use') {
+            const switchResult = await signInWithPopup(auth, driveProvider);
+            token = GoogleAuthProvider.credentialFromResult(switchResult)?.accessToken;
+          } else {
+            throw err;
+          }
+        }
+      }
+    } else {
+      const result = await signInWithPopup(auth, driveProvider);
+      token = GoogleAuthProvider.credentialFromResult(result)?.accessToken;
+    }
+
+    if (!token) {
+      throw new Error('Izin akses Google Drive tidak diterima. Silakan coba lagi.');
+    }
+
+    cachedDriveAccessToken = token;
+    setHasDriveAccess(true);
+    return token;
   }, []);
 
   const signInWithEmail = useCallback(async (email: string, password: string) => {
@@ -491,6 +586,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const confirmPasswordResetByActionCode = useCallback(
+    async (oobCode: string, newPassword: string) => {
+      if (newPassword.length < 6) {
+        throw new Error('Kata sandi baru minimal 6 karakter.');
+      }
+      const email = await verifyPasswordResetCode(auth, oobCode);
+      await confirmPasswordReset(auth, oobCode, newPassword);
+      if (auth.currentUser) {
+        await auth.currentUser.reload();
+        setUser(auth.currentUser);
+      }
+      return email;
+    },
+    []
+  );
+
+  const applyEmailVerificationByCode = useCallback(async (oobCode: string) => {
+    await applyActionCode(auth, oobCode);
+    if (auth.currentUser) {
+      await auth.currentUser.reload();
+      setUser(auth.currentUser);
+    }
+  }, []);
+
   const syncDownloadToCloud = useCallback(async (item: Omit<CloudHistoryItem, 'savedAt'>) => {
     const current = auth.currentUser;
     if (!current || !current.emailVerified) return;
@@ -667,6 +786,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOutUser = useCallback(async () => {
+    cachedDriveAccessToken = null;
+    setHasDriveAccess(false);
     await signOut(auth);
   }, []);
 
@@ -679,6 +800,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         cloudHistory,
         hasPasswordProvider,
         hasGoogleProvider,
+        hasDriveAccess,
+        getDriveAccessToken,
+        invalidateDriveAccessToken,
+        connectGoogleDrive,
         signInWithGoogle,
         signInWithEmail,
         registerWithEmail,
@@ -688,6 +813,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         changeOrSetPassword,
         sendPasswordChangeCodeToEmail,
         verifyAndConfirmPasswordCode,
+        confirmPasswordResetByActionCode,
+        applyEmailVerificationByCode,
         syncDownloadToCloud,
         toggleCloudFavorite,
         updateCloudFolder,

@@ -10,6 +10,15 @@ export type SocialPlatform =
   | 'threads'
   | 'capcut';
 
+export interface MediaQualityOption {
+  id: string;
+  label: string;
+  resolution: string;
+  url: string;
+  size?: number;
+  isHd?: boolean;
+}
+
 export interface ExtractedMediaResult {
   platform: SocialPlatform;
   id: string;
@@ -20,6 +29,7 @@ export interface ExtractedMediaResult {
   music: string;
   sdLabel?: string;
   hdLabel?: string;
+  qualityOptions?: MediaQualityOption[];
   image?: string;
   mediaItems?: Array<{
     type: 'video' | 'image';
@@ -150,10 +160,13 @@ export function isAllowedMediaDownloadUrl(input: string): boolean {
       host.endsWith('tikcdn.io') ||
       host.endsWith('capcut.com') ||
       host.endsWith('capcutcdn.com') ||
+      host.endsWith('capcutvod.com') ||
+      host.endsWith('bytevod.com') ||
       host.endsWith('byteintl.com') ||
       host.endsWith('threads.net') ||
       host.endsWith('threads.com') ||
       host.includes('tiktokcdn') ||
+      host.includes('capcut') ||
       host.endsWith('tioo.eu.org')
     );
   } catch {
@@ -232,20 +245,42 @@ async function extractTikTok(url: string): Promise<ExtractedMediaResult> {
   const playUrl = normalizeTikWmUrl(d.play);
   const hdPlayUrl = normalizeTikWmUrl(d.hdplay) || playUrl;
   const musicUrl = normalizeTikWmUrl(d.music || d.music_info?.play);
+  const qualityOptions: MediaQualityOption[] = [];
+  if (hdPlayUrl && hdPlayUrl !== playUrl) {
+    qualityOptions.push({
+      id: '1080p',
+      label: '1080p Full HD',
+      resolution: '1080p',
+      url: hdPlayUrl,
+      size: d.hd_size || 0,
+      isHd: true,
+    });
+  }
+  if (playUrl) {
+    qualityOptions.push({
+      id: '720p',
+      label: hdPlayUrl !== playUrl ? '720p Standar' : 'Kualitas Asli',
+      resolution: hdPlayUrl !== playUrl ? '720p' : 'HD',
+      url: playUrl,
+      size: d.size || 0,
+      isHd: hdPlayUrl === playUrl,
+    });
+  }
 
   return {
     platform: 'tiktok',
     id: d.id || String(Date.now()),
     title: d.title || 'Video TikTok',
     cover: normalizeTikWmUrl(d.cover || d.origin_cover),
-    play: playUrl,
+    play: hdPlayUrl,
     hdplay: hdPlayUrl,
     music: musicUrl,
-    sdLabel: 'Standar',
-    hdLabel: d.hdplay ? '1080p Full HD' : 'Kualitas Asli HD',
+    sdLabel: hdPlayUrl !== playUrl ? '720p Tanpa Watermark' : 'HD Tanpa Watermark',
+    hdLabel: d.hdplay ? '1080p Full HD (No Watermark)' : 'HD Tanpa Watermark',
+    qualityOptions,
     duration: d.duration || 0,
-    size: d.size || 0,
-    hdSize: d.hd_size || 0,
+    size: d.hd_size || d.size || 0,
+    hdSize: d.hd_size || d.size || 0,
     stats: {
       likes: d.digg_count ?? 0,
       comments: d.comment_count ?? 0,
@@ -289,9 +324,9 @@ async function extractInstagram(url: string): Promise<ExtractedMediaResult> {
   }
 
   const items = raw
-    .filter((item) => item && typeof item.url === 'string' && item.url)
+    .filter((item) => item && (typeof item.nowm === 'string' || typeof item.url === 'string'))
     .map((item) => {
-      const mediaUrl = String(item.url);
+      const mediaUrl = String(item.nowm || item.hd || item.url || '');
       const isImage =
         mediaUrl.includes('.jpg') ||
         mediaUrl.includes('.jpeg') ||
@@ -302,7 +337,8 @@ async function extractInstagram(url: string): Promise<ExtractedMediaResult> {
         url: mediaUrl,
         thumbnail: typeof item.thumbnail === 'string' ? item.thumbnail : '',
       };
-    });
+    })
+    .filter((item) => Boolean(item.url));
 
   if (items.length === 0) {
     throw new Error('Tautan unduhan Instagram tidak tersedia.');
@@ -323,8 +359,19 @@ async function extractInstagram(url: string): Promise<ExtractedMediaResult> {
     play: firstVideo?.url || '',
     hdplay: firstVideo?.url || '',
     music: '',
-    sdLabel: 'Standar',
-    hdLabel: 'Kualitas Asli HD',
+    sdLabel: '1080p HD (No Watermark)',
+    hdLabel: 'Kualitas Asli HD (No Watermark)',
+    qualityOptions: firstVideo?.url
+      ? [
+          {
+            id: '1080p',
+            label: '1080p Full HD (No Watermark)',
+            resolution: '1080p HD',
+            url: firstVideo.url,
+            isHd: true,
+          },
+        ]
+      : undefined,
     image: firstImage?.url || '',
     mediaItems: items,
     duration: 0,
@@ -372,16 +419,37 @@ async function extractFacebook(url: string): Promise<ExtractedMediaResult> {
         const imageMatch = html.match(/<meta property="og:image" content="([^"]*)"/);
         const videoIdMatch = url.match(/(?:v=|videos\/|reel\/)(\d+)/);
 
+        const fbQualities: MediaQualityOption[] = [];
+        if (hdUrl) {
+          fbQualities.push({
+            id: '720p',
+            label: '720p / 1080p HD',
+            resolution: '720p HD',
+            url: hdUrl,
+            isHd: true,
+          });
+        }
+        if (sdUrl && sdUrl !== hdUrl) {
+          fbQualities.push({
+            id: '480p',
+            label: '480p Standar (SD)',
+            resolution: '480p',
+            url: sdUrl,
+            isHd: false,
+          });
+        }
+
         return {
           platform: 'facebook',
           id: videoIdMatch?.[1] || String(Date.now()),
           title: titleMatch ? decodeHtmlEntities(titleMatch[1]) : 'Video Facebook',
           cover: imageMatch ? decodeHtmlEntities(imageMatch[1]) : '',
-          play: sdUrl || hdUrl,
+          play: hdUrl || sdUrl,
           hdplay: hdUrl || sdUrl,
           music: '',
-          sdLabel: 'SD',
-          hdLabel: hdUrl ? 'HD 720p/1080p' : 'Kualitas Terbaik',
+          sdLabel: hdUrl ? 'HD 720p/1080p (No Watermark)' : 'HD',
+          hdLabel: hdUrl ? '1080p / 720p HD (No Watermark)' : 'Kualitas Terbaik HD',
+          qualityOptions: fbQualities,
           duration: 0,
           size: 0,
           hdSize: 0,
@@ -420,16 +488,37 @@ async function extractFacebook(url: string): Promise<ExtractedMediaResult> {
     throw new Error('Video Facebook tidak ditemukan atau tautan tidak valid.');
   }
 
+  const fbFallbackQualities: MediaQualityOption[] = [];
+  if (fbData.HD) {
+    fbFallbackQualities.push({
+      id: '720p',
+      label: '720p / 1080p HD (No Watermark)',
+      resolution: '720p HD',
+      url: fbData.HD,
+      isHd: true,
+    });
+  }
+  if (fbData.Normal_video && fbData.Normal_video !== fbData.HD) {
+    fbFallbackQualities.push({
+      id: '480p',
+      label: '480p Standar (SD)',
+      resolution: '480p',
+      url: fbData.Normal_video,
+      isHd: false,
+    });
+  }
+
   return {
     platform: 'facebook',
     id: String(Date.now()),
     title: 'Video Facebook',
     cover: '',
-    play: fbData.Normal_video || fbData.HD || '',
+    play: fbData.HD || fbData.Normal_video || '',
     hdplay: fbData.HD || fbData.Normal_video || '',
     music: '',
-    sdLabel: 'SD',
-    hdLabel: fbData.HD ? 'HD 720p/1080p' : 'Kualitas Terbaik',
+    sdLabel: fbData.HD ? 'HD 720p/1080p (No Watermark)' : 'HD',
+    hdLabel: fbData.HD ? '1080p / 720p HD (No Watermark)' : 'Kualitas Terbaik HD',
+    qualityOptions: fbFallbackQualities,
     duration: 0,
     size: 0,
     hdSize: 0,
@@ -524,17 +613,64 @@ async function extractYouTube(url: string): Promise<ExtractedMediaResult> {
 
   const info = decodeSaveTubeData(infoPayload.data);
 
-  // Request true 1080p Full HD, 720p HD fallback, 360p SD, and 320kbps/128kbps MP3
-  const [sdUrl, hd1080Url, hd720Url, mp3HighUrl, mp3StdUrl] = await Promise.all([
-    requestSaveTubeDownload(cdn, info.key, 'video', '360').catch(() => ''),
+  // Request true 1080p Full HD, 720p HD, 480p SD, 360p low-data, and 320kbps/128kbps MP3
+  const [hd1080Url, hd720Url, sd480Url, sd360Url, mp3HighUrl, mp3StdUrl] = await Promise.all([
     requestSaveTubeDownload(cdn, info.key, 'video', '1080').catch(() => ''),
     requestSaveTubeDownload(cdn, info.key, 'video', '720').catch(() => ''),
+    requestSaveTubeDownload(cdn, info.key, 'video', '480').catch(() => ''),
+    requestSaveTubeDownload(cdn, info.key, 'video', '360').catch(() => ''),
     requestSaveTubeDownload(cdn, info.key, 'audio', '320').catch(() => ''),
     requestSaveTubeDownload(cdn, info.key, 'audio', '128').catch(() => ''),
   ]);
 
-  const bestHdUrl = hd1080Url || hd720Url || sdUrl;
-  const hdLabel = hd1080Url ? '1080p Full HD' : hd720Url ? '720p HD' : '360p';
+  const ytQualities: MediaQualityOption[] = [];
+  if (hd1080Url) {
+    ytQualities.push({
+      id: '1080p',
+      label: '1080p Full HD',
+      resolution: '1080p',
+      url: hd1080Url,
+      isHd: true,
+    });
+  }
+  if (hd720Url && hd720Url !== hd1080Url) {
+    ytQualities.push({
+      id: '720p',
+      label: '720p HD',
+      resolution: '720p',
+      url: hd720Url,
+      isHd: true,
+    });
+  }
+  if (sd480Url && sd480Url !== hd720Url && sd480Url !== hd1080Url) {
+    ytQualities.push({
+      id: '480p',
+      label: '480p SD',
+      resolution: '480p',
+      url: sd480Url,
+      isHd: false,
+    });
+  }
+  if (sd360Url && sd360Url !== sd480Url && sd360Url !== hd720Url) {
+    ytQualities.push({
+      id: '360p',
+      label: '360p Hemat Data',
+      resolution: '360p',
+      url: sd360Url,
+      isHd: false,
+    });
+  }
+
+  const sdUrl = sd480Url || sd360Url || hd720Url || hd1080Url;
+  const bestHdUrl = hd1080Url || hd720Url || sd480Url || sd360Url;
+  const hdLabel = hd1080Url
+    ? '1080p Full HD'
+    : hd720Url
+      ? '720p HD'
+      : sd480Url
+        ? '480p SD'
+        : '360p';
+  const sdLabel = sd480Url ? '480p SD' : sd360Url ? '360p' : hdLabel;
   const bestMp3Url = mp3HighUrl || mp3StdUrl;
 
   if (!sdUrl && !bestHdUrl && !bestMp3Url) {
@@ -560,11 +696,12 @@ async function extractYouTube(url: string): Promise<ExtractedMediaResult> {
     id: videoId,
     title: info.title || 'Video YouTube',
     cover: info.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-    play: sdUrl || bestHdUrl,
+    play: bestHdUrl,
     hdplay: bestHdUrl,
     music: bestMp3Url,
-    sdLabel: '360p',
+    sdLabel: hdLabel,
     hdLabel,
+    qualityOptions: ytQualities,
     duration: info.duration || 0,
     size: 0,
     hdSize: 0,
@@ -577,13 +714,29 @@ async function extractYouTube(url: string): Promise<ExtractedMediaResult> {
   };
 }
 
-function parseResolutionFromTwitterUrl(url: string): string {
+function parseTwitterResolutionTier(url: string): { id: string; resolution: string; label: string; isHd: boolean } {
   const match = url.match(/\/(\d{3,4})x(\d{3,4})\//);
-  if (!match) return 'HD';
-  const height = Math.max(Number(match[1]), Number(match[2]));
-  if (height >= 1920) return '1080p Full HD';
-  if (height >= 1280) return '720p HD';
-  return `${match[1]}×${match[2]}`;
+  if (!match) {
+    return { id: 'hd', resolution: 'HD', label: 'Kualitas HD', isHd: true };
+  }
+  const w = Number(match[1]);
+  const h = Number(match[2]);
+  const longSide = Math.max(w, h);
+  const shortSide = Math.min(w, h);
+  if (shortSide >= 1080 || longSide >= 1920) {
+    return { id: '1080p', resolution: '1080p', label: '1080p Full HD', isHd: true };
+  }
+  if (shortSide >= 720 || longSide >= 1280) {
+    return { id: '720p', resolution: '720p', label: '720p HD', isHd: true };
+  }
+  if (shortSide >= 480 || longSide >= 850) {
+    return { id: '480p', resolution: '480p', label: '480p SD', isHd: false };
+  }
+  return { id: '360p', resolution: '360p', label: `360p (${w}×${h})`, isHd: false };
+}
+
+function parseResolutionFromTwitterUrl(url: string): string {
+  return parseTwitterResolutionTier(url).label;
 }
 
 async function extractTwitter(url: string): Promise<ExtractedMediaResult> {
@@ -637,6 +790,7 @@ async function extractTwitter(url: string): Promise<ExtractedMediaResult> {
 
   let hdUrl = firstVideo?.url || '';
   let sdUrl = firstVideo?.url || '';
+  const twitterQualities: MediaQualityOption[] = [];
 
   if (firstVideo?.variants && firstVideo.variants.length > 0) {
     const mp4s = firstVideo.variants
@@ -645,6 +799,20 @@ async function extractTwitter(url: string): Promise<ExtractedMediaResult> {
     if (mp4s.length > 0) {
       hdUrl = mp4s[0].url || hdUrl;
       sdUrl = mp4s[mp4s.length - 1].url || sdUrl;
+      const seenTiers = new Set<string>();
+      for (const variant of mp4s) {
+        if (!variant.url) continue;
+        const tier = parseTwitterResolutionTier(variant.url);
+        if (seenTiers.has(tier.id)) continue;
+        seenTiers.add(tier.id);
+        twitterQualities.push({
+          id: tier.id,
+          label: tier.label,
+          resolution: tier.resolution,
+          url: variant.url,
+          isHd: tier.isHd,
+        });
+      }
     }
   }
 
@@ -657,11 +825,12 @@ async function extractTwitter(url: string): Promise<ExtractedMediaResult> {
     id: tweet.id || statusId,
     title: tweet.text || 'Postingan X / Twitter',
     cover: firstVideo?.thumbnail_url || firstPhoto?.url || '',
-    play: sdUrl,
+    play: hdUrl,
     hdplay: hdUrl,
     music: '',
-    sdLabel: 'SD',
+    sdLabel: hdUrl ? parseResolutionFromTwitterUrl(hdUrl) : 'HD',
     hdLabel: hdUrl ? parseResolutionFromTwitterUrl(hdUrl) : 'HD',
+    qualityOptions: twitterQualities,
     image: !hdUrl ? firstPhoto?.url || '' : '',
     duration: Math.round(firstVideo?.duration || 0),
     size: 0,
@@ -712,6 +881,38 @@ async function extractPinterest(url: string): Promise<ExtractedMediaResult> {
         r.videos?.V_1080P?.url || r.videos?.V_720P?.url || r.video_url || '';
       const sdVideoUrl = r.video_url || r.videos?.V_720P?.url || hdVideoUrl;
       const imageUrl = r.image || '';
+      const pinQualities: MediaQualityOption[] = [];
+      if (r.videos?.V_1080P?.url) {
+        pinQualities.push({
+          id: '1080p',
+          label: '1080p Full HD',
+          resolution: '1080p',
+          url: r.videos.V_1080P.url,
+          isHd: true,
+        });
+      }
+      if (r.videos?.V_720P?.url && r.videos.V_720P.url !== r.videos?.V_1080P?.url) {
+        pinQualities.push({
+          id: '720p',
+          label: '720p HD',
+          resolution: '720p',
+          url: r.videos.V_720P.url,
+          isHd: true,
+        });
+      }
+      if (
+        r.video_url &&
+        r.video_url !== r.videos?.V_1080P?.url &&
+        r.video_url !== r.videos?.V_720P?.url
+      ) {
+        pinQualities.push({
+          id: '480p',
+          label: '480p Standar',
+          resolution: '480p',
+          url: r.video_url,
+          isHd: false,
+        });
+      }
 
       if (hdVideoUrl || imageUrl) {
         return {
@@ -719,11 +920,12 @@ async function extractPinterest(url: string): Promise<ExtractedMediaResult> {
           id: r.id || String(Date.now()),
           title: r.title || r.description || 'Pin Pinterest',
           cover: imageUrl,
-          play: sdVideoUrl,
+          play: hdVideoUrl,
           hdplay: hdVideoUrl,
           music: '',
-          sdLabel: 'Standar',
+          sdLabel: r.videos?.V_1080P?.url ? '1080p Full HD' : '720p HD',
           hdLabel: r.videos?.V_1080P?.url ? '1080p Full HD' : '720p HD',
+          qualityOptions: pinQualities,
           image: imageUrl,
           duration: 0,
           size: 0,
@@ -808,8 +1010,19 @@ async function extractThreads(url: string): Promise<ExtractedMediaResult> {
             play: videos[0] || '',
             hdplay: videos[0] || '',
             music: '',
-            sdLabel: 'Standar',
-            hdLabel: videos[0] ? 'HD' : undefined,
+            sdLabel: 'HD (No Watermark)',
+            hdLabel: videos[0] ? '1080p HD (No Watermark)' : undefined,
+            qualityOptions: videos[0]
+              ? [
+                  {
+                    id: '1080p',
+                    label: '1080p HD (No Watermark)',
+                    resolution: '1080p HD',
+                    url: videos[0],
+                    isHd: true,
+                  },
+                ]
+              : undefined,
             image: videos.length === 0 ? images[0] : undefined,
             mediaItems: mediaItems.length > 1 ? mediaItems : undefined,
             duration: 0,
@@ -854,8 +1067,17 @@ async function extractThreads(url: string): Promise<ExtractedMediaResult> {
           play: cleanVideos[0],
           hdplay: cleanVideos[0],
           music: '',
-          sdLabel: 'Standar',
-          hdLabel: 'HD',
+          sdLabel: 'HD (No Watermark)',
+          hdLabel: '1080p HD (No Watermark)',
+          qualityOptions: [
+            {
+              id: '1080p',
+              label: '1080p HD (No Watermark)',
+              resolution: '1080p HD',
+              url: cleanVideos[0],
+              isHd: true,
+            },
+          ],
           duration: 0,
           size: 0,
           hdSize: 0,
@@ -877,6 +1099,19 @@ async function extractThreads(url: string): Promise<ExtractedMediaResult> {
   );
 }
 
+function cleanCapCutWatermarkUrl(raw: string): string {
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    if (parsed.searchParams.has('watermark')) {
+      parsed.searchParams.set('watermark', '0');
+    }
+    return parsed.toString();
+  } catch {
+    return raw;
+  }
+}
+
 async function extractCapCut(url: string): Promise<ExtractedMediaResult> {
   let resolvedUrl = url;
   try {
@@ -889,6 +1124,58 @@ async function extractCapCut(url: string): Promise<ExtractedMediaResult> {
     if (headRes.url) resolvedUrl = headRes.url;
 
     const html = await headRes.text();
+
+    // Priority 1: Direct HTML clean non-watermarked template streams
+    const noWmHtmlMatch =
+      html.match(/"without_watermark_url"\s*:\s*"([^"]+\.mp4[^"]*)"/i) ||
+      html.match(/"original_video_url"\s*:\s*"([^"]+\.mp4[^"]*)"/i) ||
+      html.match(/"video_no_watermark"\s*:\s*"([^"]+\.mp4[^"]*)"/i) ||
+      html.match(/"hd_video_url"\s*:\s*"([^"]+\.mp4[^"]*)"/i);
+    const cleanHtmlVideo = noWmHtmlMatch
+      ? cleanCapCutWatermarkUrl(unescapeJsonString(noWmHtmlMatch[1]))
+      : '';
+    const coverHtmlMatch =
+      html.match(/"cover_url"\s*:\s*"([^"]+)"/i) ||
+      html.match(/property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+    const titleHtmlMatch =
+      html.match(/"short_title"\s*:\s*"([^"]+)"/i) ||
+      html.match(/property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+
+    if (cleanHtmlVideo && !cleanHtmlVideo.includes('cc_landing/video_en')) {
+      return {
+        platform: 'capcut',
+        id: String(Date.now()),
+        title: titleHtmlMatch
+          ? decodeHtmlEntities(unescapeJsonString(titleHtmlMatch[1]))
+          : 'Template CapCut',
+        cover: coverHtmlMatch ? unescapeJsonString(coverHtmlMatch[1]) : '',
+        play: cleanHtmlVideo,
+        hdplay: cleanHtmlVideo,
+        music: '',
+        sdLabel: '1080p HD (No Watermark)',
+        hdLabel: '1080p Full HD (No Watermark)',
+        qualityOptions: [
+          {
+            id: '1080p',
+            label: '1080p Full HD (No Watermark)',
+            resolution: '1080p HD',
+            url: cleanHtmlVideo,
+            isHd: true,
+          },
+        ],
+        duration: 0,
+        size: 0,
+        hdSize: 0,
+        stats: {},
+        author: {
+          nickname: 'Kreator CapCut',
+          uniqueId: 'capcut',
+          avatar: '',
+        },
+      };
+    }
+
+    // Priority 2: Upstream CapCut extractors prioritizing explicit no-watermark HD streams
     for (const endpoint of ['capcut', 'aio']) {
       try {
         const apiRes = await fetch(
@@ -903,12 +1190,25 @@ async function extractCapCut(url: string): Promise<ExtractedMediaResult> {
             status?: boolean | number;
             title?: string;
             video?: string;
+            nowm?: string;
+            no_watermark?: string;
+            without_watermark?: string;
+            originalVideoUrl?: string;
+            hd?: string;
             url?: string;
             cover?: string;
             thumbnail?: string;
             result?: {
               title?: string;
               video?: string;
+              nowm?: string;
+              no_watermark?: string;
+              without_watermark?: string;
+              video_no_watermark?: string;
+              originalVideoUrl?: string;
+              hd?: string;
+              video_hd?: string;
+              videoUrl?: string;
               url?: string;
               cover?: string;
               thumbnail?: string;
@@ -916,7 +1216,29 @@ async function extractCapCut(url: string): Promise<ExtractedMediaResult> {
             };
           };
 
-          const videoUrl = json.result?.video || json.result?.url || json.video || json.url || '';
+          const noWmUrl =
+            json.result?.nowm ||
+            json.result?.no_watermark ||
+            json.result?.without_watermark ||
+            json.result?.video_no_watermark ||
+            json.result?.originalVideoUrl ||
+            json.result?.video_hd ||
+            json.result?.hd ||
+            json.nowm ||
+            json.no_watermark ||
+            json.without_watermark ||
+            json.originalVideoUrl ||
+            json.hd ||
+            '';
+          const fallbackVideoUrl =
+            json.result?.videoUrl ||
+            json.result?.video ||
+            json.result?.url ||
+            json.video ||
+            json.url ||
+            '';
+          const rawChosen = noWmUrl || fallbackVideoUrl;
+          const videoUrl = cleanCapCutWatermarkUrl(rawChosen);
           const coverUrl =
             json.result?.cover || json.result?.thumbnail || json.cover || json.thumbnail || '';
           const title = json.result?.title || json.title || 'Template CapCut';
@@ -930,8 +1252,17 @@ async function extractCapCut(url: string): Promise<ExtractedMediaResult> {
               play: videoUrl,
               hdplay: videoUrl,
               music: '',
-              sdLabel: 'Standar',
-              hdLabel: 'HD',
+              sdLabel: '1080p HD (No Watermark)',
+              hdLabel: '1080p Full HD (No Watermark)',
+              qualityOptions: [
+                {
+                  id: '1080p',
+                  label: '1080p Full HD (No Watermark)',
+                  resolution: '1080p HD',
+                  url: videoUrl,
+                  isHd: true,
+                },
+              ],
               duration: 0,
               size: 0,
               hdSize: 0,
@@ -953,25 +1284,32 @@ async function extractCapCut(url: string): Promise<ExtractedMediaResult> {
       html.match(/"video_url"\s*:\s*"([^"]+\.mp4[^"]*)"/i) ||
       html.match(/"play_url"\s*:\s*"([^"]+)"/i) ||
       html.match(/property=["']og:video(?::url)?["'][^>]+content=["']([^"']+)["']/i);
-    const rawVideo = videoJsonMatch ? unescapeJsonString(videoJsonMatch[1]) : '';
-    const coverMatch =
-      html.match(/"cover_url"\s*:\s*"([^"]+)"/i) ||
-      html.match(/property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
-    const titleMatch =
-      html.match(/"short_title"\s*:\s*"([^"]+)"/i) ||
-      html.match(/property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+    const rawVideo = videoJsonMatch
+      ? cleanCapCutWatermarkUrl(unescapeJsonString(videoJsonMatch[1]))
+      : '';
 
     if (rawVideo && !rawVideo.includes('cc_landing/video_en')) {
       return {
         platform: 'capcut',
         id: String(Date.now()),
-        title: titleMatch ? decodeHtmlEntities(unescapeJsonString(titleMatch[1])) : 'Template CapCut',
-        cover: coverMatch ? unescapeJsonString(coverMatch[1]) : '',
+        title: titleHtmlMatch
+          ? decodeHtmlEntities(unescapeJsonString(titleHtmlMatch[1]))
+          : 'Template CapCut',
+        cover: coverHtmlMatch ? unescapeJsonString(coverHtmlMatch[1]) : '',
         play: rawVideo,
         hdplay: rawVideo,
         music: '',
-        sdLabel: 'Standar',
-        hdLabel: 'HD',
+        sdLabel: '1080p HD (No Watermark)',
+        hdLabel: '1080p Full HD (No Watermark)',
+        qualityOptions: [
+          {
+            id: '1080p',
+            label: '1080p Full HD (No Watermark)',
+            resolution: '1080p HD',
+            url: rawVideo,
+            isHd: true,
+          },
+        ],
         duration: 0,
         size: 0,
         hdSize: 0,

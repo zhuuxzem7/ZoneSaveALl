@@ -1,12 +1,12 @@
 {
-  "projectId": "zonesavetik",
-  "appId": "1:1010798547640:web:cedebd605a778a25029a4d",
-  "apiKey": "AIzaSyBFlCmukuphq6nmqY4oHKHlKUyUTFNmxNQ",
-  "authDomain": "zonesavetik.firebaseapp.com",
+  "projectId": "gen-lang-client-0121190135",
+  "appId": "1:325085138964:web:d8eba66efb448880169701",
+  "apiKey": "AIzaSyA2GHZQD7NYnciAhXr3dDuneIXg87290Z0",
+  "authDomain": "gen-lang-client-0121190135.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-zonesavealldownl-0a33b8b2-4c62-4cab-8318-f71c96302ff4",
-  "storageBucket": "zonesavetik.firebasestorage.app",
-  "messagingSenderId": "1010798547640",
+  "storageBucket": "gen-lang-client-0121190135.firebasestorage.app",
+  "messagingSenderId": "325085138964",
   "measurementId": "",
-  "oAuthClientId": "1010798547640-e3d5fl81ipe69b90b279ikh2uelca4g7.apps.googleusercontent.com",
+  "oAuthClientId": "325085138964-79gneh5cnpce11ljsr8lfhampnpa0ucj.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

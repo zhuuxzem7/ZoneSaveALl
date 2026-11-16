@@ -22,9 +22,59 @@
   }
 }
 
+@keyframes result-card-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes progress-shimmer {
+  0% {
+    transform: translate3d(-100%, 0, 0);
+  }
+  100% {
+    transform: translate3d(200%, 0, 0);
+  }
+}
+
+@keyframes progress-indeterminate {
+  0% {
+    transform: translate3d(-65%, 0, 0);
+  }
+  50% {
+    transform: translate3d(115%, 0, 0);
+  }
+  100% {
+    transform: translate3d(-65%, 0, 0);
+  }
+}
+
+.animate-result-enter {
+  animation: result-card-enter 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-progress-shimmer {
+  animation: progress-shimmer 1.35s linear infinite;
+}
+
+.animate-progress-indeterminate {
+  animation: progress-indeterminate 1.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+
+  .animate-result-enter,
+  .animate-progress-shimmer,
+  .animate-progress-indeterminate {
+    animation: none;
   }
 }
 

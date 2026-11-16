@@ -4,9 +4,20 @@ import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+const firestoreDatabaseId = (firebaseConfig as { firestoreDatabaseId?: string }).firestoreDatabaseId;
+export const db = firestoreDatabaseId
+  ? getFirestore(app, firestoreDatabaseId)
+  : getFirestore(app);
 export const auth = getAuth(app);
+auth.languageCode = 'id';
+export const GOOGLE_DRIVE_SCOPES = [
+  'https://www.googleapis.com/auth/drive.file',
+] as const;
+
 export const googleProvider = new GoogleAuthProvider();
+for (const scope of GOOGLE_DRIVE_SCOPES) {
+  googleProvider.addScope(scope);
+}
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export enum OperationType {

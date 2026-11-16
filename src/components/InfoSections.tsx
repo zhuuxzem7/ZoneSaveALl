@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { CheckCircle2, ChevronDown } from 'lucide-react';
 import type { PlatformTab } from '../types/media';
 import { PLATFORM_LIST, PlatformLogo } from './PlatformLogo';
+import { getPlatformSeoById } from '../../lib/platformSeo';
 
 interface InfoSectionsProps {
+  activePlatform?: PlatformTab;
   onSelectPlatform: (platform: PlatformTab) => void;
 }
 
@@ -79,13 +81,55 @@ const FAQS = [
   },
 ];
 
-export default function InfoSections({ onSelectPlatform }: InfoSectionsProps) {
+export default function InfoSections({
+  activePlatform = 'all',
+  onSelectPlatform,
+}: InfoSectionsProps) {
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const socialPlatforms = PLATFORM_LIST.filter((p) => p.id !== 'all');
+  const activeSeo = getPlatformSeoById(activePlatform);
 
   return (
     <div className="mx-auto max-w-6xl px-4 sm:px-6 py-7 sm:py-10 space-y-9 sm:space-y-11">
-      {/* Section: Supported Platforms Directory */}
+      {/* Section: Dynamic Platform SEO Guide */}
+      <section
+        aria-label={activeSeo.h2Title}
+        className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 transition-colors duration-200"
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          <div className="lg:col-span-7">
+            <h2 className="font-display text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+              {activeSeo.h2Title}
+            </h2>
+            <p className="mt-2 text-xs sm:text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+              {activeSeo.seoSummary}
+            </p>
+            <p className="mt-2.5 text-xs text-slate-500 dark:text-slate-400">
+              Contoh format tautan:{' '}
+              <code className="font-mono text-slate-700 dark:text-slate-300 break-all">
+                {activeSeo.sampleUrlFormat}
+              </code>
+            </p>
+          </div>
+
+          <ul className="lg:col-span-5 space-y-2 border-t lg:border-t-0 lg:border-l border-slate-100 dark:border-slate-800 pt-4 lg:pt-0 lg:pl-5">
+            {activeSeo.highlights.map((point) => (
+              <li
+                key={point}
+                className="flex items-start gap-2 text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed"
+              >
+                <CheckCircle2
+                  className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400"
+                  aria-hidden="true"
+                />
+                <span>{point}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      {/* Section: Supported Platforms Directory with Crawlable SEO Links */}
       <section
         id="platform-list"
         aria-label="Platform yang Didukung"
@@ -101,23 +145,34 @@ export default function InfoSections({ onSelectPlatform }: InfoSectionsProps) {
         </div>
 
         <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3.5">
-          {socialPlatforms.map((platform) => (
-            <button
-              key={platform.id}
-              type="button"
-              onClick={() => onSelectPlatform(platform.id)}
-              className="group flex flex-row sm:flex-col items-center sm:justify-center gap-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-3 sm:p-4 text-left sm:text-center hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer"
-            >
-              <span
-                className={`inline-flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg shadow-xs transition-transform duration-200 group-hover:scale-105 ${platform.brandBg}`}
+          {socialPlatforms.map((platform) => {
+            const seoItem = getPlatformSeoById(platform.id);
+            const isActive = activePlatform === platform.id;
+            return (
+              <a
+                key={platform.id}
+                href={seoItem.slug}
+                onClick={(e) => {
+                  e.preventDefault();
+                  onSelectPlatform(platform.id);
+                }}
+                className={`group flex flex-row sm:flex-col items-center sm:justify-center gap-2.5 rounded-xl border px-3.5 py-3 sm:p-4 text-left sm:text-center hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer ${
+                  isActive
+                    ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-950/30'
+                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+                }`}
               >
-                <PlatformLogo platform={platform.id} className="h-4 w-4 sm:h-5 sm:w-5" />
-              </span>
-              <span className="font-display text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap truncate">
-                {platform.shortName}
-              </span>
-            </button>
-          ))}
+                <span
+                  className={`inline-flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg shadow-xs transition-transform duration-200 group-hover:scale-105 ${platform.brandBg}`}
+                >
+                  <PlatformLogo platform={platform.id} className="h-4 w-4 sm:h-5 sm:w-5" />
+                </span>
+                <span className="font-display text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap truncate">
+                  {platform.shortName}
+                </span>
+              </a>
+            );
+          })}
         </div>
       </section>
 

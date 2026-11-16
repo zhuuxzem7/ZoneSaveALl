@@ -29,6 +29,15 @@ export interface MediaCarouselItem {
   thumbnail?: string;
 }
 
+export interface MediaQualityOption {
+  id: string;
+  label: string;
+  resolution: string;
+  url: string;
+  size?: number;
+  isHd?: boolean;
+}
+
 export interface MediaDownloadResult {
   platform: SocialPlatform;
   id: string;
@@ -39,6 +48,7 @@ export interface MediaDownloadResult {
   music: string;
   sdLabel?: string;
   hdLabel?: string;
+  qualityOptions?: MediaQualityOption[];
   image?: string;
   mediaItems?: MediaCarouselItem[];
   duration: number;

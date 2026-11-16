@@ -33,7 +33,11 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!api/|assets/|\\.well-known/|sw\\.js|registerSW\\.js|manifest\\.webmanifest|workbox-|apple-touch-icon\\.png|pwa-).*)",
+      "source": "/sitemap.xml",
+      "destination": "/api/sitemap"
+    },
+    {
+      "source": "/((?!api/|assets/|\\.well-known/|sw\\.js|registerSW\\.js|manifest\\.webmanifest|sitemap\\.xml|robots\\.txt|workbox-|apple-touch-icon\\.png|pwa-).*)",
       "destination": "/index.html"
     }
   ]

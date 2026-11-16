@@ -20,12 +20,18 @@ import VideoResultCard from './components/VideoResultCard';
 import WatchAdsModal from './components/WatchAdsModal';
 import QrShareModal from './components/QrShareModal';
 import OfflineIndicator from './components/OfflineIndicator';
+import PWAInstallPromptBanner from './components/PWAInstallPromptBanner';
+import PWAUpdatePrompt from './components/PWAUpdatePrompt';
+import MediaProgressBar, { type DownloadProgressState } from './components/MediaProgressBar';
+import TrendingViralSection from './components/TrendingViralSection';
 import InfoSections from './components/InfoSections';
 import Footer from './components/Footer';
 import AuthModal from './components/AuthModal';
 import ProfileView from './components/ProfileView';
 import MobileBottomNav from './components/MobileBottomNav';
 import LegalAndReportModal, { type LegalModalTab } from './components/LegalAndReportModal';
+import FirebaseActionModal, { type FirebaseEmailAction } from './components/FirebaseActionModal';
+import ProcessedStatsBar from './components/ProcessedStatsBar';
 import {
   AuthProvider,
   COLLECTION_FOLDERS,
@@ -44,6 +50,11 @@ import type {
   PlatformTab,
   SocialPlatform,
 } from './types/media';
+import {
+  buildStructuredDataJson,
+  getPlatformSeoById,
+  getPlatformSeoByPath,
+} from '../lib/platformSeo';
 
 type ThemeMode = 'light' | 'dark';
 type HistoryFilter = 'all' | 'favorites' | SocialPlatform;
@@ -97,11 +108,19 @@ function normalizeUserLink(input: string): string {
   return trimmed;
 }
 
-function parseInitialPlatformFromHash(): PlatformTab {
+function parseInitialPlatformFromLocation(): PlatformTab {
   if (typeof window === 'undefined') return 'all';
+  const fromPath = getPlatformSeoByPath(window.location.pathname);
+  if (fromPath) return fromPath.id;
   const hash = window.location.hash.replace('#', '').toLowerCase();
   const valid = PLATFORM_LIST.find((p) => p.id === hash);
   return valid ? valid.id : 'all';
+}
+
+function formatByteProgress(bytes: number): string {
+  if (!bytes || bytes <= 0) return '0 MB';
+  const mb = bytes / (1024 * 1024);
+  return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
 function ZoneSaveAllContent() {
@@ -119,6 +138,16 @@ function ZoneSaveAllContent() {
   const [activePage, setActivePage] = useState<'home' | 'profile'>('home');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
+  const [hasManualTheme, setHasManualTheme] = useState<boolean>(() => {
+    try {
+      const saved =
+        localStorage.getItem(THEME_STORAGE_KEY) || localStorage.getItem(LEGACY_THEME_KEY);
+      return saved === 'dark' || saved === 'light';
+    } catch {
+      return false;
+    }
+  });
+
   const [theme, setTheme] = useState<ThemeMode>(() => {
     try {
       const saved =
@@ -127,10 +156,17 @@ function ZoneSaveAllContent() {
     } catch {
       // ignore storage errors
     }
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches
+    ) {
+      return 'dark';
+    }
     return 'light';
   });
 
-  const [activeTab, setActiveTab] = useState<PlatformTab>(parseInitialPlatformFromHash);
+  const [activeTab, setActiveTab] = useState<PlatformTab>(parseInitialPlatformFromLocation);
 
   const [history, setHistory] = useState<DownloadHistoryItem[]>(() => {
     try {
@@ -186,6 +222,19 @@ function ZoneSaveAllContent() {
   } | null>(null);
   const dismissedClipboardRef = useRef<string>('');
   const [isLoading, setIsLoading] = useState(false);
+  const [lookupProgress, setLookupProgress] = useState<{
+    progress: number;
+    stage: string;
+    detail?: string;
+    isBatch: boolean;
+  }>({
+    progress: 0,
+    stage: 'Memproses tautan media...',
+    isBatch: false,
+  });
+  const [activeDownload, setActiveDownload] = useState<DownloadProgressState | null>(null);
+  const downloadAbortRef = useRef<AbortController | null>(null);
+  const downloadClearTimerRef = useRef<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [mediaResult, setMediaResult] = useState<MediaDownloadResult | null>(null);
   const [isWatchAdsOpen, setIsWatchAdsOpen] = useState(false);
@@ -201,12 +250,79 @@ function ZoneSaveAllContent() {
     prefillUrl: '',
     prefillPlatform: 'umum',
   });
+  const [firebaseAction, setFirebaseAction] = useState<FirebaseEmailAction | null>(null);
+  const [sessionProcessedCount, setSessionProcessedCount] = useState(0);
 
   useEffect(() => {
     if (!user && activePage === 'profile') {
       setActivePage('home');
     }
   }, [activePage, user]);
+
+  useEffect(() => {
+    if (!isLoading || lookupProgress.isBatch) return;
+
+    setLookupProgress({
+      progress: 14,
+      stage: 'Mendeteksi platform & memvalidasi tautan...',
+      detail: 'Langkah 1/3',
+      isBatch: false,
+    });
+
+    const stageTimers = [
+      window.setTimeout(() => {
+        setLookupProgress((prev) =>
+          prev.isBatch
+            ? prev
+            : {
+                progress: 46,
+                stage: 'Mengambil stream HD tanpa watermark...',
+                detail: 'Langkah 2/3',
+                isBatch: false,
+              }
+        );
+      }, 450),
+      window.setTimeout(() => {
+        setLookupProgress((prev) =>
+          prev.isBatch
+            ? prev
+            : {
+                progress: 76,
+                stage: 'Memeriksa resolusi & opsi unduhan...',
+                detail: 'Langkah 3/3',
+                isBatch: false,
+              }
+        );
+      }, 1150),
+      window.setTimeout(() => {
+        setLookupProgress((prev) =>
+          prev.isBatch
+            ? prev
+            : {
+                progress: 91,
+                stage: 'Menyiapkan pratinjau media...',
+                detail: 'Hampir selesai',
+                isBatch: false,
+              }
+        );
+      }, 2100),
+    ];
+
+    return () => {
+      for (const id of stageTimers) {
+        window.clearTimeout(id);
+      }
+    };
+  }, [isLoading, lookupProgress.isBatch]);
+
+  useEffect(() => {
+    return () => {
+      downloadAbortRef.current?.abort();
+      if (downloadClearTimerRef.current !== null) {
+        window.clearTimeout(downloadClearTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (profile?.preferredFilenameMode) {
@@ -230,12 +346,33 @@ function ZoneSaveAllContent() {
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeColorMeta) {
+      themeColorMeta.setAttribute('content', theme === 'dark' ? '#0f172a' : '#1d4ed8');
+    }
+    if (!hasManualTheme) return;
     try {
       localStorage.setItem(THEME_STORAGE_KEY, theme);
     } catch {
       // ignore storage errors
     }
-  }, [theme]);
+  }, [hasManualTheme, theme]);
+
+  useEffect(() => {
+    if (
+      hasManualTheme ||
+      typeof window === 'undefined' ||
+      typeof window.matchMedia !== 'function'
+    ) {
+      return;
+    }
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleSystemThemeChange = (event: MediaQueryListEvent) => {
+      setTheme(event.matches ? 'dark' : 'light');
+    };
+    mediaQuery.addEventListener('change', handleSystemThemeChange);
+    return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
+  }, [hasManualTheme]);
 
   useEffect(() => {
     try {
@@ -297,14 +434,56 @@ function ZoneSaveAllContent() {
   }, [checkClipboardSilently]);
 
   useEffect(() => {
-    const onHashChange = () => {
+    const syncTabFromLocation = () => {
+      const fromPath = getPlatformSeoByPath(window.location.pathname);
+      if (fromPath) {
+        setActiveTab(fromPath.id);
+        return;
+      }
       const hash = window.location.hash.replace('#', '').toLowerCase();
       const valid = PLATFORM_LIST.find((p) => p.id === hash);
       if (valid) setActiveTab(valid.id);
     };
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
+    window.addEventListener('hashchange', syncTabFromLocation);
+    window.addEventListener('popstate', syncTabFromLocation);
+    return () => {
+      window.removeEventListener('hashchange', syncTabFromLocation);
+      window.removeEventListener('popstate', syncTabFromLocation);
+    };
   }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    const seo = getPlatformSeoById(activeTab);
+    const isHttpOrigin =
+      window.location.protocol === 'http:' || window.location.protocol === 'https:';
+    const origin = isHttpOrigin ? window.location.origin : 'https://zonesaveall.vercel.app';
+    const canonicalUrl = seo.slug === '/' ? `${origin}/` : `${origin}${seo.slug}`;
+
+    document.title = seo.title;
+
+    const setMetaContent = (selector: string, content: string) => {
+      const el = document.querySelector(selector);
+      if (el) el.setAttribute('content', content);
+    };
+
+    setMetaContent('meta[name="description"]', seo.description);
+    setMetaContent('meta[property="og:title"]', seo.title);
+    setMetaContent('meta[property="og:description"]', seo.description);
+    setMetaContent('meta[property="og:url"]', canonicalUrl);
+    setMetaContent('meta[name="twitter:title"]', seo.title);
+    setMetaContent('meta[name="twitter:description"]', seo.description);
+
+    const canonicalLink = document.querySelector('link[rel="canonical"]');
+    if (canonicalLink) {
+      canonicalLink.setAttribute('href', canonicalUrl);
+    }
+
+    const jsonLdEl = document.getElementById('zonesaveall-jsonld');
+    if (jsonLdEl) {
+      jsonLdEl.textContent = buildStructuredDataJson(seo, origin);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -329,7 +508,16 @@ function ZoneSaveAllContent() {
     setActiveTab(tab);
     setErrorMessage(null);
     if (typeof window !== 'undefined') {
-      window.history.replaceState(null, '', tab === 'all' ? '#beranda' : `#${tab}`);
+      const isHttpOrigin =
+        window.location.protocol === 'http:' || window.location.protocol === 'https:';
+      if (isHttpOrigin) {
+        const seo = getPlatformSeoById(tab);
+        if (window.location.pathname !== seo.slug) {
+          window.history.pushState(null, '', seo.slug);
+        }
+      } else {
+        window.history.replaceState(null, '', tab === 'all' ? '#beranda' : `#${tab}`);
+      }
     }
     inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     inputRef.current?.focus();
@@ -554,17 +742,44 @@ function ZoneSaveAllContent() {
     }
 
     const d = directJson.data;
+    const playUrl = normalizeTikWmUrl(d.play);
+    const hdPlayUrl = normalizeTikWmUrl(d.hdplay) || playUrl;
+    const qualityOptions = [];
+    if (hdPlayUrl && hdPlayUrl !== playUrl) {
+      qualityOptions.push({
+        id: '1080p',
+        label: '1080p Full HD',
+        resolution: '1080p',
+        url: hdPlayUrl,
+        size: d.hd_size || 0,
+        isHd: true,
+      });
+    }
+    if (playUrl) {
+      qualityOptions.push({
+        id: '720p',
+        label: hdPlayUrl !== playUrl ? '720p Standar' : 'Kualitas Asli',
+        resolution: hdPlayUrl !== playUrl ? '720p' : 'HD',
+        url: playUrl,
+        size: d.size || 0,
+        isHd: hdPlayUrl === playUrl,
+      });
+    }
+
     return {
       platform: 'tiktok',
       id: d.id || String(Date.now()),
       title: d.title || 'Video TikTok',
       cover: normalizeTikWmUrl(d.cover || d.origin_cover),
-      play: normalizeTikWmUrl(d.play),
-      hdplay: normalizeTikWmUrl(d.hdplay) || normalizeTikWmUrl(d.play),
+      play: hdPlayUrl,
+      hdplay: hdPlayUrl,
       music: normalizeTikWmUrl(d.music || d.music_info?.play),
+      sdLabel: hdPlayUrl !== playUrl ? '720p Tanpa Watermark' : 'HD Tanpa Watermark',
+      hdLabel: d.hdplay ? '1080p Full HD (No Watermark)' : 'HD Tanpa Watermark',
+      qualityOptions,
       duration: d.duration || 0,
-      size: d.size || 0,
-      hdSize: d.hd_size || 0,
+      size: d.hd_size || d.size || 0,
+      hdSize: d.hd_size || d.size || 0,
       stats: {
         likes: d.digg_count ?? 0,
         comments: d.comment_count ?? 0,
@@ -620,19 +835,39 @@ function ZoneSaveAllContent() {
       return;
     }
 
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setErrorMessage(
+        'Anda sedang offline. Antarmuka dan riwayat/koleksi tersimpan tetap dapat dibuka, namun sambungkan internet untuk mengunduh media baru.'
+      );
+      return;
+    }
+
     const detected = detectPlatformFromUrl(normalizedUrl);
     if (detected) {
       setActiveTab(detected);
     }
 
+    setLookupProgress({
+      progress: 14,
+      stage: 'Mendeteksi platform & memvalidasi tautan...',
+      detail: 'Langkah 1/3',
+      isBatch: false,
+    });
     setIsLoading(true);
     setErrorMessage(null);
     setBatchResults([]);
 
     try {
       const resolved = await resolveSingleMedia(normalizedUrl);
+      setLookupProgress({
+        progress: 100,
+        stage: 'Media siap diunduh!',
+        detail: 'Selesai',
+        isBatch: false,
+      });
       setMediaResult(resolved);
       setActiveSourceUrl(normalizedUrl);
+      setSessionProcessedCount((prev) => prev + 1);
       saveToHistory(resolved, normalizedUrl);
     } catch (err) {
       let msg = 'Terjadi kesalahan saat mengambil data media. Coba lagi.';
@@ -667,6 +902,21 @@ function ZoneSaveAllContent() {
       return;
     }
 
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setErrorMessage(
+        'Anda sedang offline. Sambungkan internet untuk memproses antrean unduhan baru.'
+      );
+      return;
+    }
+
+    let completedCount = 0;
+    const totalCount = uniqueUrls.length;
+    setLookupProgress({
+      progress: 10,
+      stage: `Memproses antrean multi-link (0/${totalCount})...`,
+      detail: `0 dari ${totalCount} tautan`,
+      isBatch: true,
+    });
     setIsLoading(true);
     setErrorMessage(null);
     setBatchResults([]);
@@ -683,6 +933,18 @@ function ZoneSaveAllContent() {
               url,
               error: err instanceof Error ? err.message : 'Gagal mengambil media.',
             };
+          } finally {
+            completedCount += 1;
+            const pct = Math.round((completedCount / totalCount) * 100);
+            setLookupProgress({
+              progress: Math.max(12, pct),
+              stage:
+                completedCount >= totalCount
+                  ? 'Semua tautan antrean selesai diproses!'
+                  : `Memproses antrean multi-link (${completedCount}/${totalCount})...`,
+              detail: `${completedCount} dari ${totalCount} tautan`,
+              isBatch: true,
+            });
           }
         })
       );
@@ -717,6 +979,13 @@ function ZoneSaveAllContent() {
     };
 
     const params = new URLSearchParams(window.location.search);
+    const fbMode = params.get('mode')?.trim() || '';
+    const fbOobCode = params.get('oobCode')?.trim() || '';
+    if ((fbMode === 'resetPassword' || fbMode === 'verifyEmail') && fbOobCode) {
+      setFirebaseAction({ mode: fbMode, oobCode: fbOobCode });
+      window.history.replaceState(null, '', '/');
+    }
+
     const paramUrl = params.get('url')?.trim() || '';
     const paramText = params.get('text')?.trim() || '';
     const paramTitle = params.get('title')?.trim() || '';
@@ -794,15 +1063,17 @@ function ZoneSaveAllContent() {
     return `zonesaveall_${media.platform}${suffix}_${safeUser}_${safeId}`;
   };
 
-  const triggerFileDownload = (
-    mediaUrl: string,
-    filename: string,
-    type: 'mp4' | 'mp3' | 'jpg'
-  ) => {
-    if (!mediaUrl) return;
-    const downloadUrl = `${API_BASE}/api/download?url=${encodeURIComponent(
-      mediaUrl
-    )}&filename=${encodeURIComponent(filename)}&type=${type}`;
+  const cancelActiveDownload = () => {
+    downloadAbortRef.current?.abort();
+    downloadAbortRef.current = null;
+    if (downloadClearTimerRef.current !== null) {
+      window.clearTimeout(downloadClearTimerRef.current);
+      downloadClearTimerRef.current = null;
+    }
+    setActiveDownload(null);
+  };
+
+  const fallbackAnchorDownload = (downloadUrl: string, filename: string, type: string) => {
     const anchor = document.createElement('a');
     anchor.href = downloadUrl;
     anchor.download = `${filename}.${type}`;
@@ -811,28 +1082,162 @@ function ZoneSaveAllContent() {
     document.body.removeChild(anchor);
   };
 
-  const handleDownloadStandard = (overrideUrl?: string) => {
+  const triggerFileDownload = async (
+    mediaUrl: string,
+    filename: string,
+    type: 'mp4' | 'mp3' | 'jpg'
+  ) => {
+    if (!mediaUrl) return;
+    const downloadUrl = `${API_BASE}/api/download?url=${encodeURIComponent(
+      mediaUrl
+    )}&filename=${encodeURIComponent(filename)}&type=${type}`;
+
+    downloadAbortRef.current?.abort();
+    if (downloadClearTimerRef.current !== null) {
+      window.clearTimeout(downloadClearTimerRef.current);
+      downloadClearTimerRef.current = null;
+    }
+
+    const controller = new AbortController();
+    downloadAbortRef.current = controller;
+    const downloadId = `${filename}-${Date.now()}`;
+    const variant = type === 'mp3' ? 'teal' : 'emerald';
+    const mediaLabel =
+      type === 'mp3' ? 'Audio MP3' : type === 'jpg' ? 'Gambar HD' : 'Video MP4 HD';
+
+    setActiveDownload({
+      id: downloadId,
+      label: `Menyiapkan unduhan ${mediaLabel}...`,
+      detailText: 'Menghubungkan stream',
+      progress: 8,
+      indeterminate: true,
+      variant,
+      status: 'active',
+    });
+
+    try {
+      const response = await fetch(downloadUrl, { signal: controller.signal });
+      const contentType = response.headers.get('content-type') || '';
+      if (!response.ok || contentType.includes('application/json') || !response.body) {
+        throw new Error('Streaming unavailable');
+      }
+
+      const contentLengthHeader = response.headers.get('content-length');
+      const totalBytes = contentLengthHeader ? Number(contentLengthHeader) : 0;
+      const hasKnownLength = Number.isFinite(totalBytes) && totalBytes > 0;
+
+      const reader = response.body.getReader();
+      const chunks: BlobPart[] = [];
+      let receivedBytes = 0;
+      let lastUpdateTs = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          receivedBytes += value.byteLength;
+
+          const now = Date.now();
+          if (now - lastUpdateTs >= 80 || (hasKnownLength && receivedBytes >= totalBytes)) {
+            lastUpdateTs = now;
+            if (hasKnownLength) {
+              const pct = Math.min(99, Math.round((receivedBytes / totalBytes) * 100));
+              setActiveDownload({
+                id: downloadId,
+                label: `Mengunduh ${mediaLabel}...`,
+                detailText: `${formatByteProgress(receivedBytes)} / ${formatByteProgress(totalBytes)}`,
+                progress: pct,
+                indeterminate: false,
+                variant,
+                status: 'active',
+              });
+            } else {
+              setActiveDownload({
+                id: downloadId,
+                label: `Mengunduh ${mediaLabel}...`,
+                detailText: `${formatByteProgress(receivedBytes)} terunduh`,
+                progress: 50,
+                indeterminate: true,
+                variant,
+                status: 'active',
+              });
+            }
+          }
+        }
+      }
+
+      const blobType =
+        contentType ||
+        (type === 'mp3' ? 'audio/mpeg' : type === 'jpg' ? 'image/jpeg' : 'video/mp4');
+      const blob = new Blob(chunks, { type: blobType });
+      const blobUrl = URL.createObjectURL(blob);
+      fallbackAnchorDownload(blobUrl, filename, type);
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
+
+      setActiveDownload({
+        id: downloadId,
+        label: `Unduhan ${mediaLabel} selesai!`,
+        detailText: formatByteProgress(blob.size),
+        progress: 100,
+        indeterminate: false,
+        variant,
+        status: 'complete',
+      });
+      downloadClearTimerRef.current = window.setTimeout(() => {
+        setActiveDownload((prev) => (prev?.id === downloadId ? null : prev));
+      }, 3200);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return;
+      }
+      fallbackAnchorDownload(downloadUrl, filename, type);
+      setActiveDownload({
+        id: downloadId,
+        label: `Mengalihkan unduhan ${mediaLabel} ke browser...`,
+        detailText: 'Unduhan dimulai',
+        progress: 100,
+        indeterminate: false,
+        variant,
+        status: 'complete',
+      });
+      downloadClearTimerRef.current = window.setTimeout(() => {
+        setActiveDownload((prev) => (prev?.id === downloadId ? null : prev));
+      }, 2800);
+    } finally {
+      if (downloadAbortRef.current === controller) {
+        downloadAbortRef.current = null;
+      }
+    }
+  };
+
+  const handleDownloadStandard = (overrideUrl?: string, qualityTag?: string) => {
     const targetUrl = overrideUrl || mediaResult?.play;
     if (!targetUrl || !mediaResult) return;
-    triggerFileDownload(targetUrl, buildDownloadFilename(mediaResult), 'mp4');
+    const suffix = qualityTag ? `_${qualityTag}` : '';
+    void triggerFileDownload(targetUrl, buildDownloadFilename(mediaResult, suffix), 'mp4');
   };
 
   const handleDownloadHD = () => {
     if (!mediaResult) return;
     const targetUrl = mediaResult.hdplay || mediaResult.play;
-    triggerFileDownload(targetUrl, buildDownloadFilename(mediaResult, '_HD'), 'mp4');
+    void triggerFileDownload(targetUrl, buildDownloadFilename(mediaResult, '_HD'), 'mp4');
   };
 
   const handleDownloadMp3 = () => {
     if (!mediaResult?.music) return;
-    triggerFileDownload(mediaResult.music, buildDownloadFilename(mediaResult, '_audio'), 'mp3');
+    void triggerFileDownload(
+      mediaResult.music,
+      buildDownloadFilename(mediaResult, '_audio'),
+      'mp3'
+    );
   };
 
   const handleDownloadImage = (overrideUrl?: string, slideIndex?: number) => {
     const targetUrl = overrideUrl || mediaResult?.image;
     if (!targetUrl || !mediaResult) return;
     const suffix = slideIndex ? `_slide${slideIndex}` : '';
-    triggerFileDownload(targetUrl, buildDownloadFilename(mediaResult, suffix), 'jpg');
+    void triggerFileDownload(targetUrl, buildDownloadFilename(mediaResult, suffix), 'jpg');
   };
 
   const handleReset = () => {
@@ -921,7 +1326,10 @@ function ZoneSaveAllContent() {
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200">
       <Header
         theme={theme}
-        onToggleTheme={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
+        onToggleTheme={() => {
+          setHasManualTheme(true);
+          setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+        }}
         isSignedIn={Boolean(user)}
         userName={displayUserName}
         userPhoto={displayUserPhoto}
@@ -1064,7 +1472,7 @@ function ZoneSaveAllContent() {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-6 py-3 text-sm sm:text-base font-bold text-white hover:bg-red-700 disabled:bg-red-400 transition-colors cursor-pointer min-h-[46px] shrink-0 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-6 py-3 text-sm sm:text-base font-bold text-white hover:bg-red-700 hover:scale-105 active:scale-[0.98] disabled:hover:scale-100 disabled:bg-red-400 transition-all duration-200 cursor-pointer min-h-[46px] shrink-0 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                   >
                     {isLoading ? (
                       <>
@@ -1167,7 +1575,10 @@ function ZoneSaveAllContent() {
           </div>
         </section>
 
-        {/* Adsterra Banner 728x90 directly below input section */}
+        {/* Simple Dynamic Processed Videos Statistics Bar */}
+        <ProcessedStatsBar sessionIncrement={sessionProcessedCount} />
+
+        {/* Adsterra Banner 728x90 directly below stats bar */}
         <section
           aria-label="Iklan Banner Utama"
           className="mx-auto max-w-6xl px-4 sm:px-6 pt-5 pb-2"
@@ -1179,10 +1590,18 @@ function ZoneSaveAllContent() {
           />
         </section>
 
-        {/* Loading Skeleton */}
+        {/* Loading Skeleton + Animated Progress Bar */}
         {isLoading && (
           <section className="mx-auto max-w-6xl px-4 sm:px-6 pt-5 pb-4">
-            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-6 shadow-sm space-y-5">
+              <MediaProgressBar
+                progress={lookupProgress.progress}
+                stageText={lookupProgress.stage}
+                detailText={lookupProgress.detail}
+                variant="blue"
+                status="active"
+              />
+
               <div className="flex flex-col sm:flex-row gap-6 animate-pulse">
                 <div className="mx-auto sm:mx-0 w-44 sm:w-48 aspect-[9/14] rounded-lg bg-slate-200 dark:bg-slate-800 shrink-0" />
                 <div className="flex-1 space-y-4">
@@ -1272,7 +1691,7 @@ function ZoneSaveAllContent() {
                                 )
                               }
                               title="Unduh cepat MP4"
-                              className="shrink-0 rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 cursor-pointer"
+                              className="shrink-0 rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 hover:scale-105 active:scale-[0.98] transition-all duration-200 cursor-pointer"
                             >
                               MP4
                             </button>
@@ -1300,8 +1719,12 @@ function ZoneSaveAllContent() {
         {/* Media Result + Side 300x250 Adsterra Banner */}
         {!isLoading && mediaResult && (
           <VideoResultCard
+            key={`${mediaResult.platform}-${mediaResult.id}`}
             media={mediaResult}
+            sourceUrl={activeSourceUrl || urlInput}
             filenameMode={filenameMode}
+            activeDownload={activeDownload}
+            onCancelDownload={cancelActiveDownload}
             onToggleFilenameMode={() =>
               setFilenameMode((prev) => (prev === 'default' ? 'title' : 'default'))
             }
@@ -1313,6 +1736,7 @@ function ZoneSaveAllContent() {
             onReportLink={() =>
               openLegalModal('report', activeSourceUrl || urlInput, mediaResult.platform)
             }
+            onOpenAuth={() => setIsAuthModalOpen(true)}
             onReset={handleReset}
           />
         )}
@@ -1542,7 +1966,22 @@ function ZoneSaveAllContent() {
           </section>
         )}
 
-        <InfoSections onSelectPlatform={handleSelectPlatform} />
+        <InfoSections
+          activePlatform={activeTab}
+          onSelectPlatform={handleSelectPlatform}
+        />
+
+        {/* Dynamic Trending Media Section at the bottom */}
+        <TrendingViralSection
+          apiBase={API_BASE}
+          onSelectTrendingUrl={(trendingUrl) => {
+            setIsBatchMode(false);
+            setClipboardSuggestion(null);
+            setUrlInput(trendingUrl);
+            void runMediaLookup(trendingUrl);
+            window.scrollTo({ top: 220, behavior: 'smooth' });
+          }}
+        />
           </>
         )}
       </main>
@@ -1587,6 +2026,8 @@ function ZoneSaveAllContent() {
       />
 
       <OfflineIndicator />
+      <PWAInstallPromptBanner />
+      <PWAUpdatePrompt />
 
       {/* Google Login & Email Auth Modal */}
       <AuthModal
@@ -1618,6 +2059,12 @@ function ZoneSaveAllContent() {
         prefillUrl={legalModal.prefillUrl}
         prefillPlatform={legalModal.prefillPlatform}
         onClose={() => setLegalModal((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Branded Indonesian Firebase Email Verification / Password Reset Handler */}
+      <FirebaseActionModal
+        action={firebaseAction}
+        onClose={() => setFirebaseAction(null)}
       />
     </div>
   );

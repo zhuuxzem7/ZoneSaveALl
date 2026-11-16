@@ -10,19 +10,33 @@
     <meta name="apple-mobile-web-app-title" content="ZoneSaveALL" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="icon" type="image/jpeg" href="/assets/aistudio/sara_seo_pfp_6f6b2a74.jfif" />
-    <title>ZoneSaveALL - Downloader Video &amp; Audio Semua Sosial Media</title>
+    <title>ZoneSaveALL – Downloader Video HD Tanpa Watermark Gratis</title>
     <meta
       name="description"
-      content="Unduh video TikTok tanpa watermark, Instagram Reels, Facebook, YouTube, X, dan Pinterest kualitas HD asli serta audio MP3 secara gratis dan cepat."
+      content="Unduh video TikTok tanpa watermark, Instagram Reels, Facebook, YouTube, X, Pinterest, Threads &amp; CapCut kualitas HD 100% gratis dan cepat."
     />
-    <meta property="og:title" content="ZoneSaveALL - Downloader Video &amp; Audio Semua Sosial Media" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="/" vite-ignore />
+    <meta property="og:site_name" content="ZoneSaveALL" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="/" />
+    <meta property="og:title" content="ZoneSaveALL – Downloader Video HD Tanpa Watermark Gratis" />
     <meta
       property="og:description"
-      content="Unduh video TikTok tanpa watermark, Instagram Reels, Facebook, YouTube, X, dan Pinterest kualitas HD asli serta audio MP3 secara gratis dan cepat."
+      content="Unduh video TikTok tanpa watermark, Instagram Reels, Facebook, YouTube, X, Pinterest, Threads &amp; CapCut kualitas HD 100% gratis dan cepat."
     />
-    <meta property="og:image" content="/assets/aistudio/sara_seo_pfp_6f6b2a74.jfif" />
-    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/pwa-512x512.png" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ZoneSaveALL – Downloader Video HD Tanpa Watermark Gratis" />
+    <meta
+      name="twitter:description"
+      content="Unduh video TikTok tanpa watermark, Instagram Reels, Facebook, YouTube, X, Pinterest, Threads &amp; CapCut kualitas HD 100% gratis dan cepat."
+    />
+    <meta name="twitter:image" content="/pwa-512x512.png" />
+    <script id="zonesaveall-jsonld" type="application/ld+json">
+      {"@context":"https://schema.org","@graph":[{"@type":"WebApplication","name":"ZoneSaveALL","url":"/","applicationCategory":"MultimediaApplication","operatingSystem":"All","inLanguage":"id","description":"Unduh video TikTok tanpa watermark, Instagram Reels, Facebook, YouTube, X, Pinterest, Threads & CapCut kualitas HD 100% gratis dan cepat.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}]}
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -33,7 +47,8 @@
       (function () {
         try {
           var saved = localStorage.getItem('zonesaveall-theme') || localStorage.getItem('zonesavetik-theme');
-          if (saved === 'dark') {
+          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (saved === 'dark' || (!saved && prefersDark)) {
             document.documentElement.classList.add('dark');
           }
         } catch (e) {}

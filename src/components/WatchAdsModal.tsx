@@ -79,9 +79,9 @@ export default function WatchAdsModal({
             type="button"
             disabled={!isReady}
             onClick={handleCloseOrDownload}
-            className={`shrink-0 inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap min-h-[40px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 ${
+            className={`shrink-0 inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all duration-200 whitespace-nowrap min-h-[40px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 ${
               isReady
-                ? 'bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-xs'
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700 hover:scale-105 active:scale-[0.98] cursor-pointer shadow-xs'
                 : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed'
             }`}
           >
