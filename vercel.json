@@ -37,7 +37,7 @@
       "destination": "/api/sitemap"
     },
     {
-      "source": "/((?!api/|assets/|\\.well-known/|sw\\.js|registerSW\\.js|manifest\\.webmanifest|sitemap\\.xml|robots\\.txt|workbox-|apple-touch-icon\\.png|pwa-).*)",
+      "source": "/((?!api/|assets/|\\.well-known/|sw\\.js|registerSW\\.js|manifest\\.webmanifest|sitemap\\.xml|robots\\.txt|workbox-|apple-touch-icon\\.png|pwa-|google.*\\.html).*)",
       "destination": "/index.html"
     }
   ]
